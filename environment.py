@@ -28,10 +28,12 @@ class CustomEnv(gym.Env):
         
     def reset(self):
         '''
-        self.ang: 角度 (rad)
-        self.angV: 角速度 (rad/sec)
-        self.stumulus: ペグをDetect(ペグ到着の前に髭でDetect)した瞬間1→ペグが到着した瞬間0になる線形減少関数。ペグが到着するまでのカウントダウン的な役割
+        self.ang      : 角度 (rad)
+        self.angV     : 角速度 (rad/sec)
+        self.stumulus : ペグをDetect(ペグ到着の前に髭でDetect)した瞬間1→ペグが到着した瞬間0になる線形減少関数。ペグが到着するまでのカウントダウン的な役割
+        self.pegloc   : ペグの場所をそれぞれのペグごとに格納したリスト。新しくDetectされたペグはStepが進むごとに-1され、到着したタイミングで0になる。
         '''
+        
         self.L_ang = 0
         self.R_ang = 0
         self.L_angV = 0
@@ -40,8 +42,8 @@ class CustomEnv(gym.Env):
         self.L_stimulus = 0
         self.R_stimulus = 0
         
-        self.L_pegloc = False
-        self.R_pegloc = False
+        self.L_pegloc = np.empty(0)
+        self.R_pegloc = np.empty(0)
         
         obs = [self.L_ang, self.R_ang, self.L_angV, self.R_angV, self.L_stimulus, self.R_stimulus, self.L_pegloc, self.R_pegloc]
         
