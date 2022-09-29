@@ -68,8 +68,8 @@ class CustomEnv(gym.Env):
         
         self.L_ang = 0
         self.R_ang = 0
-        self.L_angV = 6*np.pi
-        self.R_angV = 6*np.pi
+        self.L_angV = 5.5*np.pi
+        self.R_angV = 5.0*np.pi
         
         self.L_stimulus = 0
         self.R_stimulus = 0
@@ -138,12 +138,13 @@ class CustomEnv(gym.Env):
         """
         
         int_value = 0
-        if self.action["Left"] == 1: # NONE
-            int_value += 1
-        elif self.action["Right"] == 1: # NONE
-            int_value += 1
+        phase_value = 0
         
-        phase_value = 1/(0.1 + (self.R_angV - self.L_angV)**2)
+#         if self.action["Left"] == 1: # NONE
+#             int_value += 0.01
+#         if self.action["Right"] == 1: # NONE
+#             int_value += 0.01
+#         phase_value = 1/(0.1 + (self.R_angV - self.L_angV)**2)*0.01
         
         reward = int_value + phase_value
         
@@ -158,11 +159,11 @@ class CustomEnv(gym.Env):
                 reward -= 50
                 done = True
             elif self.STEP >= self.maxSTEP: ## max歩以上走れたときは成功、報酬を与えて終了
-                reward += 100
+                reward += 200
                 done = True
             else:
                 self.R_ang -= 2*np.pi ## 普通に成功したときはrewardをちょっとだけ与えて続行
-                reward += 1
+                reward += 20
                 self.STEP += 1
                 done = False
         else:
@@ -179,11 +180,11 @@ class CustomEnv(gym.Env):
                 reward -= 50
                 done = True
             elif self.STEP >= self.maxSTEP: ## max歩以上走れたときは成功、報酬を与えて終了
-                reward += 100
+                reward += 200
                 done = True
             else:
                 self.L_ang -= 2*np.pi ## 普通に成功したときはrewardをちょっとだけ与えて続行
-                reward += 1
+                reward += 20
                 self.STEP += 1
                 done = False
         
