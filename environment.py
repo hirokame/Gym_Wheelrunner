@@ -74,19 +74,25 @@ class CustomEnv(gym.Env):
         self.L_stimulus = 0
         self.R_stimulus = 0
         
-        self.L_pegloc = np.empty(0)
-        self.R_pegloc = np.empty(0)
+        self.L_detect = 0
+        self.R_detect = 0
+        
+        self.L_pegloc = np.array([-5])
+        self.R_pegloc = np.array([-5])
         
         self.time = 0
         self.STEP = 0
         self.action = dict({"Left":1, "Right":1})
         
+#         obs = np.array([self.L_ang, self.R_ang, self.L_angV, self.R_angV, self.L_stimulus, self.R_stimulus, self.L_detect, self.R_detect], dtype='float32')
+#         obs = np.array([self.L_ang, self.R_ang, self.L_angV, self.R_angV, self.L_detect, self.R_detect], dtype='float32')
         obs = np.array([self.L_ang, self.R_ang, self.L_angV, self.R_angV, self.L_stimulus, self.R_stimulus], dtype='float32')
         
         return obs
 
     def step(self, action_label):
         self.time += int(self.dt*1000)
+        done = False
         
         ### 左右の脚の角速度を更新
         self.action["Left"] = action_label // self.action_num
@@ -110,8 +116,8 @@ class CustomEnv(gym.Env):
         self.L_ang = self.L_ang + dL_ang
         
         ### Stimulationを更新
-        self.L_pegloc = self.L_pegloc[self.L_pegloc>-5] ## ペグが到着してから10frame過ぎたらpeglocから消去する
-        self.R_pegloc = self.R_pegloc[self.R_pegloc>-5] 
+        self.L_pegloc = self.L_pegloc[self.L_pegloc>-6] ## ペグが到着してから6frame過ぎたらpeglocから消去する
+        self.R_pegloc = self.R_pegloc[self.R_pegloc>-6] 
         if len(self.L_pegloc) != 0:
             for i in range(len(self.L_pegloc)):
                 self.L_pegloc[i] -= 1
@@ -125,12 +131,19 @@ class CustomEnv(gym.Env):
         self.L_stimulus -= L_upcoming * (1/self.frame)
         self.R_stimulus -= R_upcoming * (1/self.frame)
         
-        if self.time%self.oneturn in self.Rpeg: # Peg Patternを元にDetectしたかどうかを判定
+        if self.time%self.oneturn in self.Lpeg: # Peg Patternを元にDetectしたかどうかを判定
+            self.L_detect = 1
             self.L_pegloc = np.append(self.L_pegloc, self.frame)
             self.L_stimulus += 1
-        elif self.time%self.oneturn in self.Lpeg:
+        else:
+            self.L_detect = 0
+            
+        if self.time%self.oneturn in self.Rpeg:
+            self.R_detect = 1
             self.R_pegloc = np.append(self.R_pegloc, self.frame)
             self.R_stimulus += 1
+        else:
+            self.R_detect = 0
         
         """
         int_value  : 周期の変化が少ない場合(ACTIONがNONE、つまり角加速度が0の場合)報酬をもらえる。
@@ -140,54 +153,67 @@ class CustomEnv(gym.Env):
         int_value = 0
         phase_value = 0
         
-#         if self.action["Left"] == 1: # NONE
-#             int_value += 0.01
-#         if self.action["Right"] == 1: # NONE
-#             int_value += 0.01
-#         phase_value = 1/(0.1 + (self.R_angV - self.L_angV)**2)*0.01
-        
+        if self.action["Left"] == 1: # NONE
+            int_value += 0.5
+        if self.action["Right"] == 1: # NONE
+            int_value += 0.5
+        phase_value = 1/(0.1 + (self.R_angV - self.L_angV)**2)
         reward = int_value + phase_value
         
-        if (self.R_ang > 2*np.pi):
+        
+        ## スピードが遅すぎたら罰
+        if self.R_angV < 1.5*np.pi:
+            done = True
+            reward = -5
+        else:
+            reward += 1
+        
+        if self.L_angV < 1.5*np.pi and (not done):
+            done = True
+            reward -= 5
+        else:
+            reward += 1
+            
+        if (self.R_ang > 2*np.pi) and (not done):
             self.STEP += 1
             if len(self.R_pegloc)==0:  ## 脚をついた時にそもそもPegをDetectしてなかった時は失敗
                 self.R_ang -= 2*np.pi
-                reward -= 50
+                reward -= 5
                 done = True
-            elif self.R_pegloc[0] > 5: ##　脚をついたときにPeglocationが-10〜10の間 (-50ms〜50msの間)ならばOK、それ以外なら失敗
+            elif self.R_pegloc[0] > 5: ##　脚をついたときにPeglocationが-5〜5の間 (-50ms〜50msの間)ならばOK、それ以外(>5)なら失敗(ペグの場所に脚をつけなかった。)
                 self.R_ang -= 2*np.pi
-                reward -= 50
+                reward -= 5
                 done = True
-            elif self.STEP >= self.maxSTEP: ## max歩以上走れたときは成功、報酬を与えて終了
-                reward += 200
+            elif self.STEP >= self.maxSTEP: ## Max歩以上走れたときは成功、報酬を与えて終了
+                reward += 100
                 done = True
             else:
                 self.R_ang -= 2*np.pi ## 普通に成功したときはrewardをちょっとだけ与えて続行
-                reward += 20
+                reward += 100
                 self.STEP += 1
-                done = False
-        else:
-            done = False
         
         if (self.L_ang > 2*np.pi) and (not done):
             self.STEP += 1
             if len(self.L_pegloc)==0:  ## 脚をついた時にそもそもPegをDetectしてなかった時は失敗
                 self.L_ang -= 2*np.pi
-                reward -= 50
+                reward -= 5
                 done = True
             elif self.L_pegloc[0] > 5: ##　脚をついたときにPeglocationが-5〜5の間 (-50ms〜50msの間)ならばOK、それ以外なら失敗
                 self.L_ang -= 2*np.pi
-                reward -= 50
+                reward -= 5
                 done = True
             elif self.STEP >= self.maxSTEP: ## max歩以上走れたときは成功、報酬を与えて終了
-                reward += 200
+                reward += 100
                 done = True
             else:
                 self.L_ang -= 2*np.pi ## 普通に成功したときはrewardをちょっとだけ与えて続行
-                reward += 20
+                reward += 100
                 self.STEP += 1
-                done = False
-        
+        if done:
+            print(reward)
+            assert -5 <= reward
+#         obs = np.array([self.L_ang, self.R_ang, self.L_angV, self.R_angV, self.L_stimulus, self.R_stimulus, self.L_detect, self.R_detect], dtype='float32')
+#         obs = np.array([self.L_ang, self.R_ang, self.L_angV, self.R_angV, self.L_detect, self.R_detect], dtype='float32')
         obs = np.array([self.L_ang, self.R_ang, self.L_angV, self.R_angV, self.L_stimulus, self.R_stimulus], dtype='float32')
         
         info = dict(
