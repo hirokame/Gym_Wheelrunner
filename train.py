@@ -12,7 +12,6 @@ from leaky_environment import CustomEnv_leaky
 env = CustomEnv()
 
 check_env(env)
-print(env)
 
 model = RecurrentPPO("MlpLstmPolicy", env, verbose=1)
 

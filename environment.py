@@ -24,7 +24,8 @@ class CustomEnv(gym.Env):
         self.STEP = 0 # Step Numberを保管
         self.maxSTEP = 200 # 200歩走れたら成功
         
-        self.ACTION = ["TORQUE DOWN(LARGE)","TORQUE DOWN(SMALL)","NONE","TORQUE UP(SMALL)","TORQUE UP(LARGE)"]
+#         self.ACTION = ["TORQUE DOWN(LARGE)","TORQUE DOWN(SMALL)","NONE","TORQUE UP(SMALL)","TORQUE UP(LARGE)"]
+        self.ACTION = ["TORQUE DOWN","NONE","TORQUE UP"]
         self.action = dict({"Left":1, "Right":1})
         self.action_num = len(self.ACTION)
         self.action_space = Discrete(self.action_num**2)
@@ -36,8 +37,9 @@ class CustomEnv(gym.Env):
         self.observation_space = Box(low, high, (9,), dtype="float32")
         self.reward_range = [0,1000]       # 報酬の範囲[最小値と最大値]を定義
         
-        self.dt = 0.02 # self.dt(sec)を1STEPとした制御
+        self.dt = 0.02 # self.dt(sec)を1STEPとした制御。
         self.prepare = 0.5 # ペグが到着する何sec前にヒゲでdetectするか。
+        self.width = 50 # ペグに脚をつくのを前後何(msec)まで許すか。
         self.frame = int(self.prepare/self.dt) #ヒゲでdetectしてから何stepでペグが到着するか。
         
         self.L_pegloc = []
@@ -56,8 +58,8 @@ class CustomEnv(gym.Env):
     def set_pegpattern(self, pattern="Complex"):
         if pattern=="Complex":
             self.oneturn = 4000
-            self.Lpeg = [0,150,400,600,900,1300,1650,2050,2350,2750,3200,3600]
-            self.Rpeg = [100,250,500,850,1150,1450,1850,2250,2400,2800,3250,3650]
+            self.Lpeg = [0,160,400,600,900,1300,1660,2060,2360,2760,3200,3600]
+            self.Rpeg = [100,260,500,860,1160,1460,1860,2260,2400,2800,3260,3660]
             self.Ldet = sorted(list(map(lambda x:(x+4000-int(self.prepare*1000))%4000, self.Lpeg)))
             self.Rdet = sorted(list(map(lambda x:(x+4000-int(self.prepare*1000))%4000, self.Rpeg)))
             
@@ -82,8 +84,8 @@ class CustomEnv(gym.Env):
         
         self.turntime = 0
         
-        self.L_pegloc = np.array([0,150,400])
-        self.R_pegloc = np.array([100,250])
+        self.L_pegloc = np.array([0,160,400])
+        self.R_pegloc = np.array([100,260,500])
         
         self.time = 0
         self.STEP = 0
@@ -91,9 +93,9 @@ class CustomEnv(gym.Env):
         
         obs = np.array([self.L_ang/np.pi, self.R_ang/np.pi,
                         self.L_angV/np.pi, self.R_angV/np.pi,
-                        self.L_upcoming/500, self.R_upcoming/500,
+                        self.L_upcoming/(self.prepare*1000), self.R_upcoming/(self.prepare*1000),
                         self.L_detect, self.R_detect,
-                        self.turntime/4000], dtype='float32')
+                        self.turntime/self.oneturn], dtype='float32')
         
         return obs
 
@@ -106,23 +108,33 @@ class CustomEnv(gym.Env):
         self.action["Left"] = action_label // self.action_num
         self.action["Right"] = action_label % self.action_num
         
-        if self.action["Left"] == 0: # TORQUE DOWN LARGE
-            self.L_angV -= 1.0
-        elif self.action["Left"] == 1: # TORQUE DOWN SMALL
-            self.L_angV -= 0.5
-        elif self.action["Left"] == 3: # TORQUE UP SMALL
-            self.L_angV += 0.5
-        elif self.action["Left"] == 4: # TORQUE UP LARGE
-            self.L_angV += 1.0
+#         if self.action["Left"] == 0: # TORQUE DOWN LARGE
+#             self.L_angV -= 2
+#         elif self.action["Left"] == 1: # TORQUE DOWN SMALL
+#             self.L_angV -= 1
+#         elif self.action["Left"] == 3: # TORQUE UP SMALL
+#             self.L_angV += 1
+#         elif self.action["Left"] == 4: # TORQUE UP LARGE
+#             self.L_angV += 2
             
-        if self.action["Right"] == 0: # TORQUE DOWN LARGE
-            self.R_angV -= 1.0
-        elif self.action["Right"] == 1: # TORQUE DOWN SMALL
-            self.R_angV -= 0.5
-        elif self.action["Right"] == 3: # TORQUE UP SMALL
-            self.R_angV += 0.5
-        elif self.action["Right"] == 4: # TORQUE UP LARGE
-            self.R_angV += 1.0
+#         if self.action["Right"] == 0: # TORQUE DOWN LARGE
+#             self.R_angV -= 2
+#         elif self.action["Right"] == 1: # TORQUE DOWN SMALL
+#             self.R_angV -= 1
+#         elif self.action["Right"] == 3: # TORQUE UP SMALL
+#             self.R_angV += 1
+#         elif self.action["Right"] == 4: # TORQUE UP LARGE
+#             self.R_angV += 2
+
+        if self.action["Left"] == 0: # TORQUE DOWN
+            self.L_angV -= 1
+        elif self.action["Left"] == 2: # TORQUE UP
+            self.L_angV += 1
+            
+        if self.action["Right"] == 0: # TORQUE DOWN
+            self.R_angV -= 1
+        elif self.action["Right"] == 2: # TORQUE UP
+            self.R_angV += 1
         
         # 左右の脚の角度(位相)を更新
         dR_ang = self.dt * self.R_angV
@@ -131,14 +143,15 @@ class CustomEnv(gym.Env):
         self.R_ang += dR_ang
         self.L_ang += dL_ang
         
-        # Stimulationを更新
-        self.L_pegloc = self.L_pegloc[self.L_pegloc>-50] ## ペグが到着してから50msecが過ぎたらpeglocから消去する
-        self.R_pegloc = self.R_pegloc[self.R_pegloc>-50] 
+        #Peg locationとUpcomingを更新
+        #ペグが到着してから50msecが過ぎたらpeglocから消去する
+        self.L_pegloc = self.L_pegloc[self.L_pegloc > -self.width]
+        self.R_pegloc = self.R_pegloc[self.R_pegloc > -self.width] 
         
         self.L_pegupcoming = self.L_pegloc[self.L_pegloc>0] ## 到着前のペグを抜き出す
         self.R_pegupcoming = self.R_pegloc[self.R_pegloc>0] 
         
-        ## Pegのlocationを更新
+        ## Peg locationを更新
         if len(self.L_pegloc) != 0:
             for i in range(len(self.L_pegloc)):
                 self.L_pegloc[i] -= int(self.dt*1000)
@@ -194,7 +207,7 @@ class CustomEnv(gym.Env):
             done = True
             reward = -5
         else:
-            reward += 0.2
+            reward += (0.1+self.STEP*0.1)
         
         if self.L_angV < 2*np.pi and (not done):
             if self.print_failed_reason:
@@ -202,7 +215,7 @@ class CustomEnv(gym.Env):
             done = True
             reward -= 5
         else:
-            reward += 0.2
+            reward += (0.1+self.STEP*0.1)
             
         if (self.R_ang > 2*np.pi) and (not done):
             self.STEP += 1
@@ -213,7 +226,7 @@ class CustomEnv(gym.Env):
                     print("Touch failed")
                 done = True
                 
-            elif self.R_pegloc[0] > 5: ##　脚をついたときにPeglocationが-5〜5の間 (-50ms〜50msの間)ならばOK、それ以外(>5)なら失敗(ペグの場所に脚をつけなかった。)
+            elif self.R_pegloc[0] > self.width: ##　脚をついたときにPeglocationが-50msec〜50msecの間ならばOK、それ以外(>50msec)なら失敗(ペグの場所に脚をつけなかった。)
                 self.R_ang -= 2*np.pi
                 reward -= 5
                 if self.print_failed_reason:
@@ -226,19 +239,18 @@ class CustomEnv(gym.Env):
                 
             else:
                 self.R_ang -= 2*np.pi ## 普通に成功したときはrewardをちょっとだけ与えて続行
-                reward += 100
-                self.STEP += 1
+                reward += (10+self.STEP*5)
         
         if (self.L_ang > 2*np.pi) and (not done):
             self.STEP += 1
-            if len(self.L_pegloc)==0:  ## 脚をついた時にそもそもPegをDetectしてなかった時は失敗
+            if len(self.L_pegloc)==0:
                 self.L_ang -= 2*np.pi
                 reward -= 5
                 if self.print_failed_reason:
                     print("Touch failed")
                 done = True
                 
-            elif self.L_pegloc[0] > 5: ##　脚をついたときにPeglocationが-5〜5の間 (-50ms〜50msの間)ならばOK、それ以外なら失敗
+            elif self.L_pegloc[0] > self.width: 
                 self.L_ang -= 2*np.pi
                 reward -= 5
                 if self.print_failed_reason:
@@ -251,8 +263,7 @@ class CustomEnv(gym.Env):
                 
             else:
                 self.L_ang -= 2*np.pi ## 普通に成功したときはrewardをちょっとだけ与えて続行
-                reward += 100
-                self.STEP += 1
+                reward += (10+self.STEP*5)
                 
         if done:
             assert -5 <= reward
@@ -260,9 +271,9 @@ class CustomEnv(gym.Env):
         
         obs = np.array([self.L_ang/(2*np.pi), self.R_ang/(2*np.pi),
                         self.L_angV/(2*np.pi), self.R_angV/(2*np.pi),
-                        self.L_upcoming/500, self.R_upcoming/500,
+                        self.L_upcoming/(self.prepare*1000), self.R_upcoming/(self.prepare*1000),
                         self.L_detect, self.R_detect,
-                        self.turntime/4000], dtype='float32')
+                        self.turntime/self.oneturn], dtype='float32')
         
         info = dict(
             {"dR_ang":dR_ang,
