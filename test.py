@@ -2,14 +2,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from sb3_contrib import RecurrentPPO
-# from environment import CustomEnv
-from leaky_environment import CustomEnv
+
+from environment import CustomEnv
+from leaky_environment import CustomEnv_leaky
 
 
 env = CustomEnv()
 obs = env.reset()
 
-model = RecurrentPPO.load("./save_weights/learned_model")
+model = RecurrentPPO.load("./save_weights/best_model")
 
 env.popup()
 

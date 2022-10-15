@@ -14,11 +14,11 @@ from copy import copy
 
 
 
-class CustomEnv(gym.Env):
+class CustomEnv_leaky(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self, pegpattern="Complex"):
-        super(CustomEnv, self).__init__()
+        super(CustomEnv_leaky, self).__init__()
         
         self.time = 0 # Timeを保管
         self.STEP = 0 # Step Numberを保管
@@ -36,14 +36,15 @@ class CustomEnv(gym.Env):
         self.observation_space = Box(low, high, (9,), dtype="float32")
         self.reward_range = [0,1000]       # 報酬の範囲[最小値と最大値]を定義
         
-        self.dt = 0.01 # 20msごとの制御
-        self.prepare = 0.3 # ペグが到着する何sec前にヒゲでdetectするか。
+        self.dt = 0.02 # 20msごとの制御
+        self.prepare = 0.5 # ペグが到着する何sec前にヒゲでdetectするか。
         self.frame = int(self.prepare/self.dt) #ヒゲでdetectしてから何stepでペグが到着するか。
         
         self.L_pegloc = []
         self.R_pegloc = []
         
         self.set_pegpattern(pattern="Complex")
+        self.print_failed_reason = False
         
     def popup(self):
         self.fig = plt.figure(figsize=(10,10))
@@ -57,6 +58,8 @@ class CustomEnv(gym.Env):
             self.oneturn = 4000
             self.Lpeg = [0,150,400,600,900,1300,1650,2050,2350,2750,3200,3600]
             self.Rpeg = [100,250,500,850,1150,1450,1850,2250,2400,2800,3250,3650]
+            self.Ldet = sorted(list(map(lambda x:(x+4000-int(self.prepare*1000))%4000, self.Lpeg)))
+            self.Rdet = sorted(list(map(lambda x:(x+4000-int(self.prepare*1000))%4000, self.Rpeg)))
         
     def reset(self):
         '''
@@ -123,8 +126,8 @@ class CustomEnv(gym.Env):
         self.L_ang += dL_ang
         
         ### Stimulationを更新
-        self.L_pegloc = self.L_pegloc[self.L_pegloc>-6] ## ペグが到着してから6frame過ぎたらpeglocから消去する
-        self.R_pegloc = self.R_pegloc[self.R_pegloc>-6] 
+        self.L_pegloc = self.L_pegloc[self.L_pegloc>-4] ## ペグが到着してから4frame過ぎたらpeglocから消去する
+        self.R_pegloc = self.R_pegloc[self.R_pegloc>-4] 
         if len(self.L_pegloc) != 0:
             for i in range(len(self.L_pegloc)):
                 self.L_pegloc[i] -= 1
@@ -145,7 +148,7 @@ class CustomEnv(gym.Env):
         else:
             self.L_detect = 0
             
-        if self.time%self.oneturn in self.Rpeg:
+        if self.time%self.oneturn in self.Rdet:
             self.R_detect = 1
             self.R_pegloc = np.append(self.R_pegloc, self.frame)
             self.R_stimulus += 1
@@ -170,14 +173,16 @@ class CustomEnv(gym.Env):
         
         ## スピードが遅すぎたら罰
         if self.R_angV < 2*np.pi:
-            print("not enough speed")
+            if self.print_failed_reason:
+                print("not enough speed")
             done = True
             reward = -5
         else:
             reward += 2
         
         if self.L_angV < 2*np.pi and (not done):
-            print("not enough speed")
+            if self.print_failed_reason:
+                print("not enough speed")
             done = True
             reward -= 5
         else:
@@ -188,13 +193,15 @@ class CustomEnv(gym.Env):
             if len(self.R_pegloc)==0:  ## 脚をついた時にそもそもPegをDetectしてなかった時は失敗
                 self.R_ang -= 2*np.pi
                 reward -= 5
-                print("Touch failed")
+                if self.print_failed_reason:
+                    print("Touch failed")
                 done = True
                 
             elif self.R_pegloc[0] > 5: ##　脚をついたときにPeglocationが-5〜5の間 (-50ms〜50msの間)ならばOK、それ以外(>5)なら失敗(ペグの場所に脚をつけなかった。)
                 self.R_ang -= 2*np.pi
                 reward -= 5
-                print("Touch failed")
+                if self.print_failed_reason:
+                    print("Touch failed")
                 done = True
                 
             elif self.STEP >= self.maxSTEP: ## Max歩以上走れたときは成功、報酬を与えて終了
@@ -211,13 +218,15 @@ class CustomEnv(gym.Env):
             if len(self.L_pegloc)==0:  ## 脚をついた時にそもそもPegをDetectしてなかった時は失敗
                 self.L_ang -= 2*np.pi
                 reward -= 5
-                print("Touch failed")
+                if self.print_failed_reason:
+                    print("Touch failed")
                 done = True
                 
             elif self.L_pegloc[0] > 5: ##　脚をついたときにPeglocationが-5〜5の間 (-50ms〜50msの間)ならばOK、それ以外なら失敗
                 self.L_ang -= 2*np.pi
                 reward -= 5
-                print("Touch failed")
+                if self.print_failed_reason:
+                    print("Touch failed")
                 done = True
                 
             elif self.STEP >= self.maxSTEP: ## max歩以上走れたときは成功、報酬を与えて終了
@@ -230,7 +239,8 @@ class CustomEnv(gym.Env):
                 self.STEP += 1
                 
         if done:
-            print(reward)
+            if self.print_failed_reason:
+                print(reward)
             assert -5 <= reward
         obs = np.array([self.L_ang, self.R_ang, self.L_angV, self.R_angV, self.L_stimulus, self.R_stimulus, self.L_detect, self.R_detect, self.turntime], dtype='float32')
 #         obs = np.array([self.L_ang, self.R_ang, self.L_angV, self.R_angV, self.L_detect, self.R_detect], dtype='float32')
@@ -268,16 +278,16 @@ class CustomEnv(gym.Env):
         if len(self.L_pegloc) != 0:
             for i in range(len(self.L_pegloc)):
                 img = cv2.line(img,
-                               pt1=(int(300+self.L_pegloc[i]*20), 500),
-                               pt2=(int(500+self.L_pegloc[i]*20), 500),
+                               pt1=(int(300+self.L_pegloc[i]*40), 500),
+                               pt2=(int(500+self.L_pegloc[i]*40), 500),
                                color=(0, 0, 0),
                                thickness=10
                               )
         if len(self.R_pegloc) != 0:
             for i in range(len(self.R_pegloc)):
                 img = cv2.line(img,
-                               pt1=(int(300+self.R_pegloc[i]*20), 1100),
-                               pt2=(int(500+self.R_pegloc[i]*20), 1100),
+                               pt1=(int(300+self.R_pegloc[i]*40), 1100),
+                               pt2=(int(500+self.R_pegloc[i]*40), 1100),
                                color=(0, 0, 0),
                                thickness=10
                               )
