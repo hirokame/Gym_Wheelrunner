@@ -46,8 +46,8 @@ The action space is discrete with 9 possible actions (3×3 grid):
 ### Success Criteria
 
 - Complete 200 steps without:
-  - Dropping below minimum angular velocity (2π rad/s)
-  - Missing peg timing by more than ±50ms
+  - Dropping below minimum angular velocity (2*pi rad/s)
+  - Missing peg timing by more than +/-50ms
   - Attempting to step when no peg is detected
 
 ## Installation
@@ -180,7 +180,7 @@ The default "Complex" pattern has 12 pegs per cycle (4000ms):
 
 - **Time step**: 20ms (0.02 seconds)
 - **Peg detection advance**: 500ms before arrival
-- **Timing tolerance**: ±50ms for successful peg contact
+- **Timing tolerance**: +/-50ms for successful peg contact
 
 ### Model Architecture
 
